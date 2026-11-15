@@ -1,0 +1,77 @@
+/* ════════════════════════════════════════════════════════════════
+   高楼（Skyscrapers）—— 游戏专用皮肤
+   ════════════════════════════════════════════════════════════════ */
+
+:root {
+  --sk-ink: #24231f;
+  --sk-board: #ece4d3;
+  --sk-board-line: #d4cbb9;
+}
+
+.board-svg .sk-board-bg {
+  fill: var(--sk-board);
+  stroke: var(--sk-board-line);
+  stroke-width: 1.5;
+}
+
+.board-svg .sk-cell {
+  stroke: rgba(36, 35, 31, 0.12);
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+.board-svg .sk-cell.empty {
+  fill: #fbf7ee;
+}
+
+.board-svg .sk-cell.filled {
+  fill: #fffdf8;
+}
+
+.board-svg .sk-cell.given {
+  fill: #f1eadb;
+}
+
+.board-svg .sk-given-ring {
+  fill: none;
+  stroke: rgba(31, 111, 92, 0.45);
+  stroke-width: 1.4;
+  pointer-events: none;
+}
+
+.board-svg .sk-value {
+  fill: var(--sk-ink);
+  font-family: var(--mono);
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+}
+
+.board-svg .sk-clue {
+  fill: var(--sk-ink);
+  font-family: var(--mono);
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+}
+
+.board-svg .sk-clue.issue {
+  fill: var(--error);
+}
+
+.board-svg .sk-error {
+  fill: rgba(194, 59, 46, 0.12);
+  stroke: var(--error);
+  stroke-width: 2.2;
+  pointer-events: none;
+}
+
+.board-svg .cell-hit {
+  pointer-events: all;
+}
+
+.board-svg .cell-hit:hover {
+  fill: rgba(31, 111, 92, 0.16);
+}
