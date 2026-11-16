@@ -3,6 +3,7 @@
  */
 
 import { RAW_PUZZLES } from './puzzles-data'
+import { IMPORTED_PUZZLES } from './imported-puzzles'
 import {
   asSkyPuzzle,
   decodeBoard,
@@ -14,7 +15,8 @@ import {
 export const builtinPuzzles: SkyscraperPuzzle[] = []
 const solutions = new Map<string, number[]>()
 
-for (const raw of RAW_PUZZLES) {
+// 内置题 + 图片识别导入题（imported-puzzles.ts 由 scripts/import-image.mjs --append 写入）
+for (const raw of [...RAW_PUZZLES, ...IMPORTED_PUZZLES]) {
   if (raw.width !== raw.height) {
     console.warn(`[高楼] 非方阵：${raw.id}`)
     continue

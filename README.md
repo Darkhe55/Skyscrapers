@@ -48,6 +48,23 @@ npm start
 - **音效特效**：Web Audio 合成拨弦、水滴与落子动画，无外部音频资源
 - **缩放/平移**：滚轮缩放，中键或 `Shift` 拖拽平移
 
+## 图片导入题库（识图 CLI）
+
+```bash
+npm run import-image -- month.png                # 识别并预览（不写入）
+npm run import-image -- month.png --verify       # 额外求解 / 唯一性检查（9×9 也可能较慢，超时只警告）
+npm run import-image -- month.png --append       # 写入 src/game/imported-puzzles.ts
+npm run import-image -- month.png --json out.json  # 导出识别结果
+```
+
+- 全自动识图：Playwright + 本机 Edge 取像素 → 白格内部连通域定位 n×n 格（原题是格子间留空隙的样式）→
+  灰色气泡连通域定位 4n 个盘外提示位 → 格内数字 / 气泡内数字分别做字形聚类 + 多字体多字号模板匹配。
+- 结构校验：预填与盘外提示必须在 0..n 范围内；仍不确定时用 `--map 簇号=数字` 覆盖字形簇判读，
+  或 `--fix "cell:列,行=值,top:i=值,bottom:i=值,left:i=值,right:i=值"` 覆盖具体数值。
+- 导入题写入 `src/game/imported-puzzles.ts`，`npm run gen` 不会覆盖；游戏启动时会与内置题一起加载。
+- 限制：`--verify` 会调用项目 solver 检查唯一性，9×9 也可能需要较多节点，超时只警告；
+  未带参考解时「显示解 / 提示一格」依赖求解器现场计算。
+
 ## 技术栈
 
 - Vite + TypeScript
@@ -84,3 +101,4 @@ npm run check     # 审计题库
 npm run verify    # 参考解、逻辑回放与交互验证
 npm run audit     # 逐题审计逻辑解题
 ```
+
