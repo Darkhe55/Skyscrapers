@@ -14,7 +14,7 @@
  *   Home/End 行首/行尾；Esc 关闭。
  */
 
-import type { GameAdapter, Puzzle } from './types'
+import type { CustomEditorControl, GameAdapter, Puzzle } from './types'
 import {
   edgeCount,
   horizontalEdgeIndex,
@@ -39,6 +39,7 @@ export class CustomEditor {
   private adapter: GameAdapter
   private editingId: string | null = null
   private editingName: string | null = null
+  private extrasMounted = false
 
   constructor(adapter: GameAdapter, private host: CustomHost) {
     this.adapter = adapter
@@ -203,6 +204,71 @@ export class CustomEditor {
       })
     })
     grid.tabIndex = 0
+    this.ensureExtras()
+  }
+
+  // —— 游戏扩展面板 ——
+
+  /** 提供给游戏附加面板的控制接口 */
+  private control(): CustomEditorControl {
+    const self = this
+    const syncInputs = (): void => {
+      const wEl = document.getElementById('custom-w') as HTMLInputElement | null
+      const hEl = document.getElementById('custom-h') as HTMLInputElement | null
+      if (wEl) wEl.value = String(self.w)
+      if (hEl) hEl.value = String(self.h)
+    }
+    return {
+      get width() {
+        return self.w
+      },
+      get height() {
+        return self.h
+      },
+      grid() {
+        return self.grid.slice()
+      },
+      setGrid(grid: Array<number | null>) {
+        if (grid.length !== self.w * self.h) return
+        self.grid = grid.slice()
+        self.cursor = Math.max(0, Math.min(self.w * self.h - 1, self.cursor))
+        self.renderGrid()
+      },
+      setSize(width: number, height: number) {
+        const meta = self.adapter.meta
+        self.w = Math.max(meta.customMinW, Math.min(meta.customMaxW, Math.floor(width) || self.w))
+        self.h = Math.max(meta.customMinH, Math.min(meta.customMaxH, Math.floor(height) || self.h))
+        self.grid = new Array<number | null>(self.w * self.h).fill(null)
+        self.cursor = 0
+        syncInputs()
+        self.renderGrid()
+      },
+      rerender() {
+        self.renderGrid()
+      },
+      cursor() {
+        return self.cursor
+      },
+      select(index) {
+        self.selectCell(index)
+      },
+      message(text: string, tone?: string) {
+        self.host.message(text, tone)
+      },
+    }
+  }
+
+  /** 挂载 / 显示游戏扩展面板（只挂载一次） */
+  private ensureExtras(): void {
+    const extras = this.adapter.custom.extras
+    if (!extras || this.mode() === 'edge' || this.mode() === 'none') return
+    const panel = document.getElementById('custom-extras')
+    if (!panel) return
+    panel.hidden = false
+    if (this.extrasMounted) return
+    panel.innerHTML = extras.html()
+    this.extrasMounted = true
+    extras.mount(panel, this.control())
   }
 
   open(): void {
@@ -225,6 +291,7 @@ export class CustomEditor {
     this.renderGrid()
     const editing = this.editingId ? `正在编辑「${this.editingName ?? this.editingId}」。` : ''
     this.host.message(`${editing}键盘：方向键移动 · ${this.adapter.custom.hint}`)
+    if (!this.editingId) this.adapter.custom.extras?.open?.(this.control())
     document.getElementById('custom-grid')?.focus()
   }
 
@@ -258,6 +325,7 @@ export class CustomEditor {
     if (wEl) wEl.value = String(this.w)
     if (hEl) hEl.value = String(this.h)
     this.renderGrid()
+    this.adapter.custom.extras?.load?.(p, this.control())
     this.host.message(`正在编辑「${p.name}」。保存会覆盖原题。`, 'ok')
     panel?.scrollIntoView({ block: 'nearest' })
     document.getElementById('custom-grid')?.focus()
@@ -280,6 +348,7 @@ export class CustomEditor {
       this.grid = new Array<number | null>(this.w * this.h).fill(null)
       this.cursor = 0
       this.renderGrid()
+      this.adapter.custom.extras?.reset?.(this.control())
     }
     this.host.message(`已生成 ${this.w}×${this.h} 网格。${this.adapter.custom.hint}`)
     document.getElementById('custom-grid')?.focus()
@@ -401,6 +470,11 @@ export class CustomEditor {
       return
     }
     if (this.editingName) puzzle.name = this.editingName
+    const check = this.adapter.custom.validatePuzzle?.(puzzle) ?? null
+    if (check && !check.ok) {
+      this.host.message(check.message || '题面不合法，无法载入。', 'bad')
+      return
+    }
     this.editingId = puzzle.id
     this.editingName = puzzle.name
     this.host.loadPuzzle(puzzle)
@@ -427,10 +501,19 @@ export class CustomEditor {
       return
     }
     puzzle.name = this.editingName ?? name
+    const check = this.adapter.custom.validatePuzzle?.(puzzle) ?? null
+    if (check && !check.ok) {
+      this.host.message(check.message || '题面不合法，未保存。', 'bad')
+      return
+    }
     this.host.savePuzzle(puzzle)
     this.editingId = puzzle.id
     this.editingName = puzzle.name
-    this.host.message(`已${isEditing ? '更新' : '保存'}到题库：「${puzzle.name}」，下次启动仍可选用。`, 'ok')
+    const suffix = check?.message ? ` ${check.message}` : ''
+    this.host.message(
+      `已${isEditing ? '更新' : '保存'}到题库：「${puzzle.name}」，下次启动仍可选用。${suffix}`,
+      'ok',
+    )
   }
 
   solve(): void {

@@ -656,3 +656,7 @@ button.btn:disabled {
 .custom-msg.bad {
   color: var(--error);
 }
+.custom-extras { margin-top:10px; }
+.custom-extras-grid label { display:block; font-size:12px; margin:6px 0; color:var(--ink-soft); }
+.custom-extras-grid input[type="text"], .custom-extras-grid textarea { display:block; width:100%; margin-top:4px; font:inherit; font-size:12px; padding:6px 8px; border:1px solid var(--line); border-radius:8px; background:#fbf8f1; color:var(--ink); resize:vertical; }
+.custom-extras-grid .custom-hint { font-size:11px; color:var(--ink-soft); margin-top:4px; }

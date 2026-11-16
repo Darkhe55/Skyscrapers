@@ -143,6 +143,44 @@ export interface GameMeta {
   interactionHint?: string
 }
 
+/** 自定义题板编辑器附加面板的控制接口（供游戏扩展题面录入 UI 使用） */
+export interface CustomEditorControl {
+  /** 当前编辑器宽高 */
+  readonly width: number
+  readonly height: number
+  /** 当前网格内容（null = 空/白格，数字 = 值） */
+  grid(): Array<number | null>
+  /** 用新网格替换当前内容（长度必须匹配当前宽高） */
+  setGrid(grid: Array<number | null>): void
+  /** 修改编辑器尺寸并重置网格 */
+  setSize(width: number, height: number): void
+  /** 重绘网格（内容不变） */
+  rerender(): void
+  /** 当前选中的格子索引 */
+  cursor(): number
+  /** 选中某格 */
+  select(index: number): void
+  /** 消息区提示 */
+  message(text: string, tone?: string): void
+}
+
+/**
+ * 自定义编辑器附加面板（可选）。
+ * 游戏可以在通用网格之外提供自己的题面录入控件（例如高楼的盘外线索）。
+ */
+export interface CustomEditorExtras {
+  /** 面板 HTML（渲染在网格下方） */
+  html(): string
+  /** 绑定事件（只调用一次） */
+  mount(panel: HTMLElement, ctl: CustomEditorControl): void
+  /** 生成新网格 / 清空时调用（可在这里填入默认题面） */
+  reset?(ctl: CustomEditorControl): void
+  /** 打开编辑器时调用（新建题面；不编辑旧题时） */
+  open?(ctl: CustomEditorControl): void
+  /** 编辑已有题面时调用（回填游戏特有字段） */
+  load?(p: Puzzle, ctl: CustomEditorControl): void
+}
+
 /** 自定义题板支持：核心提供通用编辑器，游戏只需声明「值集合」和编解码 */
 export interface CustomSupport {
   /**
@@ -192,6 +230,13 @@ export interface CustomSupport {
   encodePuzzle(p: Puzzle): Record<string, unknown>
   /** 从 library 条目还原题面；不合法返回 null */
   decodePuzzle(record: Record<string, unknown>): Puzzle | null
+  /** 可选：游戏自定义的编辑器附加面板（盘外线索、区域数字等） */
+  extras?: CustomEditorExtras
+  /**
+   * 可选：保存 / 载入自定义题前的题面审计。
+   * ok=false 会阻止载入 / 保存；ok=true 时 message 作为提示显示。
+   */
+  validatePuzzle?(p: Puzzle): { ok: boolean; message: string; tone?: 'ok' | 'bad' } | null
 }
 
 /**

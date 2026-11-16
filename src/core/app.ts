@@ -80,6 +80,7 @@ export function createApp(root: HTMLElement, adapter: GameAdapter) {
         </div>
         <div class="custom-hint" id="custom-hint"></div>
         <div class="custom-grid" id="custom-grid"></div>
+        <div class="custom-extras" id="custom-extras" hidden></div>
         <div class="toolbar" style="margin-top:10px">
           <button class="btn primary" id="custom-apply" type="button">载入题板</button>
           <button class="btn" id="custom-save" type="button">保存到题库</button>
