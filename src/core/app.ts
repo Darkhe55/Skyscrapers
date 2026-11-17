@@ -33,11 +33,16 @@ import {
   type ProgressEntry,
 } from './store'
 
+/** 一步可撤销操作：正式落子，或一次候选数切换 */
+type HistoryEntry =
+  | { kind: 'move'; move: Move }
+  | { kind: 'note'; index: number; from: number; to: number }
+
 interface Session {
   puzzle: Puzzle
   state: GameState
-  undo: Move[]
-  redo: Move[]
+  undo: HistoryEntry[]
+  redo: HistoryEntry[]
 }
 
 export function createApp(root: HTMLElement, adapter: GameAdapter) {
@@ -106,7 +111,7 @@ export function createApp(root: HTMLElement, adapter: GameAdapter) {
       <div class="legend">
         <div>${interactionHint}</div>
         <div><kbd>左键</kbd> 选中格 · <kbd>数字按钮</kbd>/<kbd>1–9</kbd> 填数 · <kbd>0</kbd>/<kbd>退格</kbd> 清除</div>
-        <div><kbd>方向键</kbd> 移动选中格 · <kbd>中键/空白拖拽</kbd> 平移画布 · <kbd>滚轮</kbd> 缩放</div>
+        <div><kbd>N</kbd> 笔记模式 · <kbd>方向键</kbd> 移动选中格 · <kbd>中键/空白拖拽</kbd> 平移画布 · <kbd>滚轮</kbd> 缩放</div>
         <div><kbd>+</kbd>/<kbd>−</kbd>/<kbd>0</kbd> 放大/缩小/复位</div>
         <div><kbd>Z</kbd> / <kbd>Shift+Z</kbd> 撤销 / 重做</div>
         <div><kbd>C</kbd> 检查 · <kbd>Esc</kbd> 清空 · <kbd>L</kbd> 逻辑解题/停止回放 · <kbd>P</kbd> 暂停/继续</div>
@@ -159,6 +164,8 @@ export function createApp(root: HTMLElement, adapter: GameAdapter) {
   /* ———————————————————— 会话 ———————————————————— */
 
   let session: Session | null = null
+  /** 笔记模式：数字按钮 / 键盘数字切换候选数，而不是写正式数字 */
+  let notesMode = false
   /** 键盘 / 数字按钮当前选中的格子；null = 未选中 */
   let cursor: number | null = null
   /** 题面预填格（这些格子不能修改） */
@@ -312,11 +319,17 @@ export function createApp(root: HTMLElement, adapter: GameAdapter) {
       return
     }
     el.hidden = false
-    const current = cursor === null ? 0 : adapter.valueAt(session.state, cursor)
+    const index = cursorIndex()
+    const current = index === null ? 0 : adapter.valueAt(session.state, index)
+    const mask = index === null ? 0 : noteMaskAt(index)
     const buttons: string[] = []
+    buttons.push(
+      `<button class="digit-btn notes${notesMode ? ' active' : ''}" type="button" data-note-toggle="1" title="笔记模式（N）">笔记</button>`,
+    )
     for (let v = 1; v <= n; v++) {
+      const active = notesMode ? (mask & (1 << (v - 1))) !== 0 : current === v
       buttons.push(
-        `<button class="digit-btn${current === v ? ' active' : ''}" type="button" data-digit="${v}">${v}</button>`,
+        `<button class="digit-btn${active ? ' active' : ''}" type="button" data-digit="${v}">${v}</button>`,
       )
     }
     buttons.push(`<button class="digit-btn clear" type="button" data-digit="0">清除</button>`)
@@ -337,6 +350,105 @@ export function createApp(root: HTMLElement, adapter: GameAdapter) {
     cursor = index
     applyCursor()
     renderDigitPad()
+  }
+
+  /** 每格候选数 bitmask 数组（bit d-1 = 数字 d）；按需挂在 state 上并随存档保存 */
+  function notesArray(): number[] {
+    if (!session) return []
+    const state = session.state as GameState & { notes?: number[] }
+    const size = session.puzzle.width * session.puzzle.height
+    if (!Array.isArray(state.notes) || state.notes.length !== size) {
+      state.notes = new Array<number>(size).fill(0)
+    }
+    return state.notes
+  }
+
+  function noteMaskAt(index: number): number {
+    if (!session) return 0
+    const notes = notesArray()
+    return index >= 0 && index < notes.length ? (notes[index] ?? 0) : 0
+  }
+
+  function pushHistory(entry: HistoryEntry): void {
+    if (!session) return
+    session.undo.push(entry)
+    session.redo.length = 0
+  }
+
+  /** 笔记模式开关：打开后数字按钮 / 键盘数字切换候选数，而不是写值 */
+  function toggleNotesMode(): void {
+    notesMode = !notesMode
+    renderDigitPad()
+    setStatus(
+      notesMode
+        ? '笔记模式：点数字按钮 / 按 1–9 切换候选数（不写值），再按 N 关闭。'
+        : '填数模式：点数字按钮 / 按 1–9 写入正式数字。',
+    )
+  }
+
+  /** 切换当前格的某个候选数；不自动跳格 */
+  function toggleNote(digit: number): void {
+    if (!session || logicPlayer.playing) return
+    const index = cursorIndex()
+    if (index === null) {
+      setStatus('先点选一个格子，再切换候选数。')
+      return
+    }
+    if (isGiven(index)) {
+      setStatus('题面预填格不能加笔记。', 'bad')
+      return
+    }
+    if (adapter.valueAt(session.state, index) !== 0) {
+      setStatus('该格已有正式数字，先清除再加笔记。', 'bad')
+      return
+    }
+    const notes = notesArray()
+    const bit = 1 << (digit - 1)
+    const from = notes[index] ?? 0
+    const to = from ^ bit
+    if (from === to) return
+    notes[index] = to
+    pushHistory({ kind: 'note', index, from, to })
+    saveState()
+    refresh()
+  }
+
+  /** 清除当前格：有正式数字清数字，否则清空候选数（都不恢复旧笔记） */
+  function clearSelected(): void {
+    if (!session || logicPlayer.playing) return
+    const index = cursorIndex()
+    if (index === null) {
+      setStatus('先点选一个格子。')
+      return
+    }
+    if (isGiven(index)) {
+      setStatus('题面预填的数字不能修改。', 'bad')
+      return
+    }
+    if (adapter.valueAt(session.state, index) !== 0) {
+      writeSelected(0)
+      return
+    }
+    const notes = notesArray()
+    const from = notes[index] ?? 0
+    if (from === 0) return
+    notes[index] = 0
+    pushHistory({ kind: 'note', index, from, to: 0 })
+    saveState()
+    refresh()
+  }
+
+  /** 从存档恢复候选数（长度不符 / 越界一律补 0） */
+  function attachNotes(state: GameState, saved: number[] | null): void {
+    const size = state.width * state.height
+    const out = new Array<number>(size).fill(0)
+    if (saved) {
+      for (let i = 0; i < size && i < saved.length; i++) {
+        const mask = Math.floor(saved[i] ?? 0)
+        out[i] = Number.isFinite(mask) ? mask & 0x1ff : 0
+      }
+    }
+    ;(state as GameState & { notes?: number[] }).notes = out
   }
 
   /** 数字按钮 / 键盘写入选中格；value = 0 表示清除 */
@@ -399,11 +511,15 @@ export function createApp(root: HTMLElement, adapter: GameAdapter) {
 
   /* ———————————————————— 会话控制 ———————————————————— */
 
-  function loadSave(puzzleId: string): GameState | null {
+  function loadSave(puzzleId: string): { state: GameState; notes: number[] | null } | null {
     try {
       const data = readProgress(puzzleId)
       if (!data) return null
-      return adapter.deserializeState(data)
+      const state = adapter.deserializeState(data)
+      if (!state) return null
+      const raw = data.notes
+      const notes = Array.isArray(raw) ? raw.map((v) => Number(v) | 0) : null
+      return { state, notes }
     } catch {
       return null
     }
@@ -411,18 +527,24 @@ export function createApp(root: HTMLElement, adapter: GameAdapter) {
 
   function saveState(): void {
     if (!session) return
-    writeProgress(adapter.serializeState(session.state) as ProgressEntry)
+    const record = adapter.serializeState(session.state) as ProgressEntry
+    const notes = (session.state as GameState & { notes?: number[] }).notes
+    if (Array.isArray(notes)) record.notes = notes.map((m) => (Number(m) | 0) & 0x1ff)
+    writeProgress(record)
   }
 
   function selectPuzzle(puzzle: Puzzle): void {
     logicPlayer.stop()
     const saved = loadSave(puzzle.id)
+    const state = saved?.state ?? adapter.createEmptyState(puzzle)
+    attachNotes(state, saved?.notes ?? null)
     session = {
       puzzle,
-      state: saved ?? adapter.createEmptyState(puzzle),
+      state,
       undo: [],
       redo: [],
     }
+    notesMode = false
     refreshGivenCells(puzzle)
     cursor = null
     writeLastPuzzle(puzzle.id)
@@ -434,7 +556,12 @@ export function createApp(root: HTMLElement, adapter: GameAdapter) {
   function pushMove(move: Move): void {
     if (!session) return
     adapter.applyMove(session.state, move)
-    session.undo.push(move)
+    // 写入正式数字时清空该格候选数；清除数字不恢复旧笔记
+    if (move.to !== 0) {
+      const notes = (session.state as GameState & { notes?: number[] }).notes
+      if (Array.isArray(notes) && move.index >= 0 && move.index < notes.length) notes[move.index] = 0
+    }
+    session.undo.push({ kind: 'move', move })
     session.redo.length = 0
     saveState()
   }
@@ -553,21 +680,33 @@ export function createApp(root: HTMLElement, adapter: GameAdapter) {
 
   /* ———————————————————— 撤销 / 重做 / 清空 ———————————————————— */
 
+  /** 施加 / 回滚一步历史（正式落子或候选数切换） */
+  function applyHistory(entry: HistoryEntry, forward: boolean): void {
+    if (!session) return
+    if (entry.kind === 'move') {
+      adapter.applyMove(session.state, forward ? entry.move : adapter.invertMove(entry.move))
+      return
+    }
+    const notes = notesArray()
+    if (entry.index >= 0 && entry.index < notes.length) {
+      notes[entry.index] = forward ? entry.to : entry.from
+    }
+  }
+
   function undo(): void {
     if (!session || !session.undo.length) return
-    const move = session.undo.pop()!
-    const inv = adapter.invertMove(move)
-    adapter.applyMove(session.state, inv)
-    session.redo.push(move)
+    const entry = session.undo.pop()!
+    applyHistory(entry, false)
+    session.redo.push(entry)
     saveState()
     refresh()
   }
 
   function redo(): void {
     if (!session || !session.redo.length) return
-    const move = session.redo.pop()!
-    adapter.applyMove(session.state, move)
-    session.undo.push(move)
+    const entry = session.redo.pop()!
+    applyHistory(entry, true)
+    session.undo.push(entry)
     saveState()
     refresh()
   }
@@ -576,6 +715,8 @@ export function createApp(root: HTMLElement, adapter: GameAdapter) {
     if (!session) return
     logicPlayer.stop()
     session.state = adapter.createEmptyState(session.puzzle)
+    attachNotes(session.state, null)
+    notesMode = false
     session.undo = []
     session.redo = []
     saveState()
@@ -740,12 +881,15 @@ export function createApp(root: HTMLElement, adapter: GameAdapter) {
       const saved = savePuzzleToLibrary(p, codec)
       refreshLibrary()
       logicPlayer.stop()
+      const restored = adapter.createEmptyState(p)
+      attachNotes(restored, null)
       session = {
         puzzle: saved.find((x) => x.id === p.id) ?? p,
-        state: adapter.createEmptyState(p),
+        state: restored,
         undo: [],
         redo: [],
       }
+      notesMode = false
       refreshGivenCells(session.puzzle)
       cursor = null
       writeLastPuzzle(p.id)
@@ -833,10 +977,20 @@ export function createApp(root: HTMLElement, adapter: GameAdapter) {
   on($('#btn-hint'), 'click', hint)
   on($('#btn-random'), 'click', pickRandomPuzzle)
   on($('#digit-pad'), 'click', (e) => {
-    const btn = (e.target as HTMLElement | null)?.closest('[data-digit]') as HTMLButtonElement | null
+    const btn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>('button')
     if (!btn) return
     resumeAudio()
-    writeSelected(Number(btn.dataset.digit ?? '0'))
+    if (btn.dataset.noteToggle) {
+      toggleNotesMode()
+      return
+    }
+    const digit = Number(btn.dataset.digit ?? '0')
+    if (digit === 0) {
+      clearSelected()
+      return
+    }
+    if (notesMode) toggleNote(digit)
+    else writeSelected(digit)
   })
   on($('#btn-mute'), 'click', toggleMute)
   on($('#btn-custom'), 'click', () => custom.open())
@@ -914,12 +1068,13 @@ export function createApp(root: HTMLElement, adapter: GameAdapter) {
         }
         if (e.key === 'Backspace' || e.key === 'Delete' || e.key === '0') {
           e.preventDefault()
-          writeSelected(0)
+          clearSelected()
           return
         }
         if (e.key.length === 1 && e.key >= '1' && e.key <= '9' && Number(e.key) <= digitMax()) {
           e.preventDefault()
-          writeSelected(Number(e.key))
+          if (notesMode) toggleNote(Number(e.key))
+          else writeSelected(Number(e.key))
           return
         }
       }
@@ -948,6 +1103,9 @@ export function createApp(root: HTMLElement, adapter: GameAdapter) {
     } else if (k === 'm') {
       e.preventDefault()
       toggleMute()
+    } else if (k === 'n') {
+      e.preventDefault()
+      toggleNotesMode()
     } else if (k === '+' || k === '=') {
       e.preventDefault()
       view.zoomIn()
@@ -1001,6 +1159,8 @@ export function createApp(root: HTMLElement, adapter: GameAdapter) {
     adapter,
     getSession: () => session,
     getCursor: () => cursorIndex(),
+    getNotes: () => notesArray(),
+    getNotesMode: () => notesMode,
     selectPuzzle,
     setStatus,
   }

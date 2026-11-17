@@ -39,6 +39,8 @@ const meta = {
   customMaxW: 9,
   customMaxH: 9,
   targetKind: 'cell' as const,
+  interactionHint:
+    '<kbd>左键</kbd> 选中格 · <kbd>数字按钮</kbd>/<kbd>1–9</kbd> 填数 · <kbd>N</kbd> 笔记 · <kbd>0</kbd>/<kbd>退格</kbd> 清除 · 题面预填不可改',
 }
 
 /** 自定义题板支持的阶数范围（题面编码为 1 字符/格，数字与线索都 ≤9） */

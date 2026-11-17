@@ -28,6 +28,8 @@ export interface GameState {
   puzzleId: string
   width: number
   height: number
+  /** 可选：每格候选数字 bitmask（bit d-1 = 数字 d），由 core/app 维护并随进度存档 */
+  notes?: number[]
 }
 
 /** 一次落子：from/to 为数字枚举，0 = Unknown（所有游戏统一约定） */

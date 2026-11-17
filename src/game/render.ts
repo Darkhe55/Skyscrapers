@@ -61,6 +61,7 @@ export function renderBoard(
     if (v !== 0) {
       content += `<text class="sk-value" x="${(x + inner / 2).toFixed(2)}" y="${(y + inner / 2 + cell * 0.02).toFixed(2)}" style="font-size:${(cell * 0.42).toFixed(2)}px">${v}</text>`
     }
+    if (v === 0) content += noteDigits(s.notes?.[i] ?? 0, x, y, inner, cell)
     if (bad.has(i)) {
       content += `<rect class="sk-error" x="${(x + 1.1).toFixed(2)}" y="${(y + 1.1).toFixed(2)}" width="${(inner - 2.2).toFixed(2)}" height="${(inner - 2.2).toFixed(2)}" rx="${(cell * 0.1).toFixed(2)}" />`
     }
@@ -97,6 +98,25 @@ export function renderBoard(
   }
 
   return `<svg class="board-svg sk-board" viewBox="0 0 ${m.svgWidth} ${m.svgHeight}" width="${m.svgWidth}" height="${m.svgHeight}" xmlns="http://www.w3.org/2000/svg">${parts.join('')}</svg>`
+}
+
+/** 候选数（笔记）：格内 3×3 小格显示，bit d-1 = 数字 d */
+function noteDigits(mask: number, x: number, y: number, size: number, cell: number): string {
+  if (!mask) return ''
+  const step = size / 3
+  const fontSize = Math.max(6, cell * 0.24)
+  const out: string[] = []
+  for (let d = 1; d <= 9; d++) {
+    if ((mask & (1 << (d - 1))) === 0) continue
+    const col = (d - 1) % 3
+    const row = Math.floor((d - 1) / 3)
+    const cx = x + step * (col + 0.5)
+    const cy = y + step * (row + 0.5)
+    out.push(
+      `<text class="cell-note" x="${cx.toFixed(2)}" y="${(cy + fontSize * 0.02).toFixed(2)}" style="font-size:${fontSize.toFixed(2)}px">${d}</text>`,
+    )
+  }
+  return out.join('')
 }
 
 export function hitTest(
