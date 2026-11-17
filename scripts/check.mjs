@@ -93,6 +93,17 @@ for (const e of entries) {
     true,
     240,
   )
+  // 附加信息（不改变通过/警告判定）：纯定式（不用反证）能否推满
+  const pure = solveByRules(
+    decoded.givens,
+    n,
+    decoded.top,
+    decoded.bottom,
+    decoded.left,
+    decoded.right,
+    false,
+    240,
+  )
   if (!plan.ok || !plan.solution) {
     console.warn(`[check] ${e.id} 规则无法单独推满（需要回溯）`)
     warnings++
@@ -103,7 +114,8 @@ for (const e of entries) {
 
   const givenCount = decoded.givens.filter((v) => v !== 0).length
   console.log(
-    `[check] ${e.id} ${n}×${n} 预填 ${givenCount} · 解唯一 · 逻辑${plan.saturated ? '可推满' : '需回溯'} · ${counted.nodes} 节点`,
+    `[check] ${e.id} ${n}×${n} 预填 ${givenCount} · 解唯一 · 逻辑${plan.saturated ? '可推满' : '需回溯'} · ${counted.nodes} 节点` +
+      ` · ${plan.usedProbing ? '用到反证' : '纯定式'} · 纯定式${pure.saturated ? '可推满' : '未推满'}`,
   )
 }
 

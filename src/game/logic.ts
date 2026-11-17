@@ -11,10 +11,13 @@ import {
 } from './types'
 
 const RULE_INFO: Record<RuleKind | 'probe' | 'search', { rule: number; label: string }> = {
-  latin: { rule: 1, label: '每行每列数字不能重复' },
-  clue: { rule: 2, label: '盘外可见高楼数限制' },
-  probe: { rule: 3, label: '反证：其他数字会立刻矛盾' },
-  search: { rule: 4, label: '回溯试探：该格最终是这个数字' },
+  clue: { rule: 1, label: '盘外线索极值：1 = 紧邻最高楼，n = 单调递增' },
+  visible: { rule: 2, label: '可见性排列交叉消除：候选被两侧线索唯一确定' },
+  latin: { rule: 3, label: '拉丁方：行/列唯一候选或隐藏单值' },
+  subset: { rule: 4, label: '候选数对/三元组：行/列内交叉消除' },
+  bound: { rule: 5, label: '可见高度上下界：排除无法凑出该侧线索的取值' },
+  probe: { rule: 6, label: '反证：其他数字会立刻矛盾' },
+  search: { rule: 7, label: '回溯试探：该格最终是这个数字' },
 }
 
 function fallbackSolve(
