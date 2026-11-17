@@ -51,7 +51,8 @@ export function cycleValue(state: GameState, target: HitTarget): number {
 export function rightClickValue(state: GameState, target: HitTarget): number {
   const s = asSkyState(state)
   const given = s.givens[target.index] ?? 0
-  return given !== 0 ? given : 0
+  const v = s.cells[target.index] ?? 0
+  return given !== 0 ? given : v <= 0 ? s.width : v - 1
 }
 
 export function applyMove(state: GameState, move: Move): void {
